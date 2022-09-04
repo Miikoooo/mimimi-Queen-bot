@@ -1,11 +1,11 @@
+# This example requires the 'message_content' privileged intent to function.
+
 import asyncio
 
 import discord
 import youtube_dl
 
 from discord.ext import commands
-
-
 
 # Suppress noise about console usage from errors
 youtube_dl.utils.bug_reports_message = lambda: ''
@@ -58,10 +58,18 @@ class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.command()
+    async def join(self, ctx, *, channel: discord.VoiceChannel):
+        """Joins a voice channel"""
+
+        if ctx.voice_client is not None:
+            return await ctx.voice_client.move_to(channel)
+
+        await channel.connect()
 
     @commands.command()
     async def play(self, ctx, *, query):
-        """Plays a Song"""
+        """Plays a file from the local filesystem"""
 
         source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(query))
         ctx.voice_client.play(source, after=lambda e: print(f'Player error: {e}') if e else None)
@@ -80,7 +88,7 @@ class Music(commands.Cog):
 
     @commands.command()
     async def stream(self, ctx, *, url):
-        """Streams from a url """
+        """Streams from a url (same as yt, but doesn't predownload)"""
 
         async with ctx.typing():
             player = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True)
@@ -115,4 +123,6 @@ class Music(commands.Cog):
                 await ctx.send("You are not connected to a voice channel.")
                 raise commands.CommandError("Author not connected to a voice channel.")
         elif ctx.voice_client.is_playing():
-            ctx.voice_client.stop()  
+            ctx.voice_client.stop()
+
+

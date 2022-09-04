@@ -51,7 +51,7 @@ async def purge(ctx, limit=50, member: discord.Member=None):
 
 #Bot joint VC
 @client.command(pass_context=True)
-async def join(ctx):
+async def join_channel(ctx):
     channel = ctx.author.voice.channel
     await channel.connect()
 
