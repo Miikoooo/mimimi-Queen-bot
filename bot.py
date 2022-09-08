@@ -62,6 +62,11 @@ async def join_channel(ctx):
 async def leave(ctx): 
     """Leaves a voice channel"""
     await ctx.voice_client.disconnect()
+
+@client.command() 
+async def penis(ctx):
+    """Writes a message"""
+    await ctx.send("Biberkrieger")   
     
 
 
