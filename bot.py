@@ -31,7 +31,8 @@ async def on_member_remove(member):
 
 #Kann x Anzahl vorheriger Nachrichten löschen
 @client.command()
-async def purge(ctx, limit=50, member: discord.Member=None):
+async def purge(ctx, limit=50, member: discord.Member=None):#
+    """Delete up to 50 messages"""
     await ctx.message.delete()
     msg = []
     try:
@@ -50,14 +51,16 @@ async def purge(ctx, limit=50, member: discord.Member=None):
     await ctx.send(f"Purged {limit} messages of {member.mention}", delete_after=3)
 
 #Bot joint VC
-@client.command(pass_context=True)
+@client.command(pass_context=True)    
 async def join_channel(ctx):
+    """Joins a voice channel"""
     channel = ctx.author.voice.channel
     await channel.connect()
 
 #Bot leaved VC
 @client.command()
 async def leave(ctx): 
+    """Leaves a voice channel"""
     await ctx.voice_client.disconnect()
     
 
