@@ -9,7 +9,10 @@ from Music import Music
 
 TOKEN = 'MTAxNTI2ODM5NzgxMjA0MzgwNg.G1uupO.dZ6kETbAfxPAW2dHzJsLHClf7y-tvfiAWqd0x4'
 
+
+
 client = commands.Bot(command_prefix = ",", intents=discord.Intents.all())
+client.remove_command('help')
 
 
 
@@ -63,6 +66,7 @@ async def leave(ctx):
     """Leaves a voice channel"""
     await ctx.voice_client.disconnect()
 
+#Robins Command
 @client.command() 
 async def penis(ctx):
     """Writes a message"""
