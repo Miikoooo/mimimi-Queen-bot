@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-import youtube_dl
 import asyncio
 
 from Music import Music
@@ -19,7 +18,7 @@ client = commands.Bot(command_prefix = ",", intents=discord.Intents.all())
 ##Bot ist Online
 @client.event
 async def on_ready():
-    await client.change_presence(status=discord.Status.idle, activity=discord.Game('adding trash commands'))
+    await client.change_presence(status=discord.Status.do_not_disturb, activity=discord.Game('adding trash commands'))
     print ('----------------')
 
 #User ist auf den Server eingetroffen.
@@ -55,16 +54,11 @@ async def purge(ctx, limit=50, member: discord.Member=None):#
 
 #Bot joint VC
 @client.command(pass_context=True)    
-async def join_channel(ctx):
+async def join(ctx):
     """Joins a voice channel"""
     channel = ctx.author.voice.channel
     await channel.connect()
 
-#Bot leaved VC
-@client.command()
-async def leave(ctx): 
-    """Leaves a voice channel"""
-    await ctx.voice_client.disconnect()
 
 #Robins Command
 @client.command()
