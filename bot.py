@@ -12,7 +12,7 @@ TOKEN = 'MTAxNTI2ODM5NzgxMjA0MzgwNg.G1uupO.dZ6kETbAfxPAW2dHzJsLHClf7y-tvfiAWqd0x
 
 
 client = commands.Bot(command_prefix = ",", intents=discord.Intents.all())
-client.remove_command('help')
+#client.remove_command('help')
 
 
 
@@ -35,7 +35,7 @@ async def on_member_remove(member):
 #Kann x Anzahl vorheriger Nachrichten löschen
 @client.command()
 async def purge(ctx, limit=50, member: discord.Member=None):#
-    """Delete up to 50 messages"""
+    """Deletes up to 50 messages"""
     await ctx.message.delete()
     msg = []
     try:
@@ -67,12 +67,15 @@ async def leave(ctx):
     await ctx.voice_client.disconnect()
 
 #Robins Command
-@client.command() 
-async def penis(ctx):
-    """Writes a message"""
-    await ctx.send("Biberkrieger")   
-    
-
+@client.command()
+async def NSFW(ctx):
+    """" Shows NSFW content """
+    embed = discord.Embed(
+            title = 'Biberkrieger',
+            colour = discord.Colour.yellow()
+)
+    embed.set_image(url = 'https://cdn.discordapp.com/attachments/622834126730428437/1022574734690500608/unknown.png')
+    await ctx.send(embed = embed)
 
 async def main():
     async with client:
