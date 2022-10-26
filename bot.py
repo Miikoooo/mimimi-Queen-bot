@@ -1,6 +1,8 @@
+from distutils.command.check import check
 import discord
 from discord.ext import commands
 import asyncio
+import random, sys
 
 from Music import Music
 
@@ -74,6 +76,42 @@ async def NSFW(ctx):
 @client.command()
 async def test(ctx):
     await ctx.send("TEST")
+
+@client.command()
+async def customs(ctx):
+    """Generiert Teams für Customsgames """
+    players, p, teams = [], int(input('Wie viele Spielen werden wieder ein qualvolles Customgame spielen: ')), int(input('Wie viele Teams wird es geben (obv. 2): '))
+    
+    if p < teams:
+    # Wenn eines davon =true ist wird das Programm beendet
+     ctx.send('Zu viele Teams oder zu viele Spieler')
+     sys.exit()
+    
+
+
+    for i in range(p):
+      #n = input('Spieler {}: '.format(i+1))
+      n = client.wait_for('Spieler {}: '.format(i+1)) 
+
+      n = n[0].upper() + n[1:] # Der erste Buchstabe im Nanem wird groß ausgegeben
+      players.append(n)
+      ctx.send(players)
+
+# Erstell eine random Liste und benutzt .append in jeder leeren Liste
+# dadurch wird die Größe der Team bestimmt durch list comprehension.
+    team_g = [list() for _ in range(teams)]
+
+    while len(players) > 0:
+       for i in range(teams):
+        p=random.choice(players)
+        team_g[i].append(p)
+        players.remove(p)
+        if not players: # Wenn nicht genung Spieler angegeben werden break(ed) das Programm
+            break
+        continue # Schütz vor der break loop 
+
+    for i in range(teams):
+       await ctx.send( 'Team {} ist {}'.format(i+1, team_g[i]) )
 
 async def main():
     async with client:
