@@ -11,7 +11,6 @@ from Music import Music
 TOKEN = 'MTAxNTI2ODM5NzgxMjA0MzgwNg.G1uupO.dZ6kETbAfxPAW2dHzJsLHClf7y-tvfiAWqd0x4'
 
 
-
 client = commands.Bot(command_prefix = ",", intents=discord.Intents.all())
 #client.remove_command('help')
 
@@ -26,12 +25,12 @@ async def on_ready():
 #User ist auf den Server eingetroffen.
 @client.event
 async def on_member_join(member):
-    print("f'{member} ist der Kirche beigetreten.")
+    await client.send("f'{member} ist der Kirche beigetreten.")
 
 #User hat den Server verlassen.
 @client.event
 async def on_member_remove(member):
-    print("f'{member} ist ein Atheist geworden.")
+    await client.send("f'{member} ist ein Atheist geworden.")
 
 #Kann x Anzahl vorheriger Nachrichten löschen
 @client.command()
@@ -80,6 +79,7 @@ async def test(ctx):
 @client.command()
 async def customs(ctx):
     """Generiert Teams für Customsgames """
+   
     players, p, teams = [], int(input('Wie viele Spielen werden wieder ein qualvolles Customgame spielen: ')), int(input('Wie viele Teams wird es geben (obv. 2): '))
     
     if p < teams:
@@ -90,9 +90,7 @@ async def customs(ctx):
 
 
     for i in range(p):
-      #n = input('Spieler {}: '.format(i+1))
-      n = client.wait_for('Spieler {}: '.format(i+1)) 
-
+      n = input('Spieler {}: '.format(i+1))
       n = n[0].upper() + n[1:] # Der erste Buchstabe im Nanem wird groß ausgegeben
       players.append(n)
       ctx.send(players)
@@ -112,6 +110,25 @@ async def customs(ctx):
 
     for i in range(teams):
        await ctx.send( 'Team {} ist {}'.format(i+1, team_g[i]) )
+
+
+
+@client.command()
+async def command(ctx):
+    #(int(input('Wie viele Spielen werden wieder ein qualvolles Customgame spielen: '))), int(input('Wie viele Teams wird es geben (obv. 2): '))
+    await ctx.send('Wie viele Spielen werden wieder ein qualvolles Customgame spielen: ')
+    players, p, teams = []
+
+    def check(msg):
+        return msg.author == ctx.author and msg.channel == ctx.channel and (msg.content) in [players, p, teams]
+
+    msg = await client.wait_for("message", check=check)
+
+    if (msg.content) == players:
+        await ctx.send("Correct")
+    else:
+        await ctx.send(f"Nope it was {players}")
+
 
 async def main():
     async with client:
