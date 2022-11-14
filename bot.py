@@ -1,9 +1,14 @@
-from distutils.command.check import check
-import discord
-from discord.ext import commands
-import asyncio
+import typing
 import random, sys
+import asyncio
+import interactions
 
+
+from distutils.command.check import check
+
+import discord
+from discord import ActionRow, Button, ButtonStyle
+from discord.ext import commands
 from Music import Music
 
 
@@ -12,7 +17,7 @@ TOKEN = 'MTAxNTI2ODM5NzgxMjA0MzgwNg.G1uupO.dZ6kETbAfxPAW2dHzJsLHClf7y-tvfiAWqd0x
 
 
 client = commands.Bot(command_prefix = ",", intents=discord.Intents.all())
-#client.remove_command('help')
+client.remove_command('help')
 
 
 
@@ -79,55 +84,34 @@ async def test(ctx):
 @client.command()
 async def customs(ctx):
     """Generiert Teams für Customsgames """
-   
-    players, p, teams = [], int(input('Wie viele Spielen werden wieder ein qualvolles Customgame spielen: ')), int(input('Wie viele Teams wird es geben (obv. 2): '))
-    
-    if p < teams:
-    # Wenn eines davon =true ist wird das Programm beendet
-     ctx.send('Zu viele Teams oder zu viele Spieler')
-     sys.exit()
-    
 
+@client.group(invoke_without_command=True)
+async def help(ctx):
+    em = discord.Embed(title = "Help")
+    current = 0
+    msg = await ctx.channel.send(
+        embed=client.help_pages[current],
+        components=[[Button(style=ButtonStyle.green, label="<<"), Button(style=ButtonStyle.green, label="<"), Button(style=ButtonStyle.green, label=">"), Button(style=ButtonStyle.green, label=">>")]])
+    while True:
+        previous_page = current
+        moderatorI = await client.wait_for("button_click") #this tests: "is button pressed"
+        if moderatorI.component.label == '<<':  #and this: "witch is button is pressed"
+            current = 0
 
-    for i in range(p):
-      n = input('Spieler {}: '.format(i+1))
-      n = n[0].upper() + n[1:] # Der erste Buchstabe im Nanem wird groß ausgegeben
-      players.append(n)
-      ctx.send(players)
+        if moderatorI.component.label == '<':
+            if current > 0:
+                current -= 1
 
-# Erstell eine random Liste und benutzt .append in jeder leeren Liste
-# dadurch wird die Größe der Team bestimmt durch list comprehension.
-    team_g = [list() for _ in range(teams)]
+        if moderatorI.component.label == '>':
+            if current < len(client.help_pages) - 1:
+                current += 1
 
-    while len(players) > 0:
-       for i in range(teams):
-        p=random.choice(players)
-        team_g[i].append(p)
-        players.remove(p)
-        if not players: # Wenn nicht genung Spieler angegeben werden break(ed) das Programm
-            break
-        continue # Schütz vor der break loop 
+        if moderatorI.component.label == '>>':
+            current = len(client.help_pages) - 1
 
-    for i in range(teams):
-       await ctx.send( 'Team {} ist {}'.format(i+1, team_g[i]) )
-
-
-
-@client.command()
-async def command(ctx):
-    #(int(input('Wie viele Spielen werden wieder ein qualvolles Customgame spielen: '))), int(input('Wie viele Teams wird es geben (obv. 2): '))
-    await ctx.send('Wie viele Spielen werden wieder ein qualvolles Customgame spielen: ')
-    players, p, teams = []
-
-    def check(msg):
-        return msg.author == ctx.author and msg.channel == ctx.channel and (msg.content) in [players, p, teams]
-
-    msg = await client.wait_for("message", check=check)
-
-    if (msg.content) == players:
-        await ctx.send("Correct")
-    else:
-        await ctx.send(f"Nope it was {players}")
+        if current != previous_page:
+            await msg.edit(embed=client.help_pages[current])
+            await moderatorI.respond(content=f"page: {current}")
 
 
 async def main():
