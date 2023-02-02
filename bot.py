@@ -80,6 +80,7 @@ async def NSFW(ctx):
     embed.set_image(url = 'https://cdn.discordapp.com/attachments/622834126730428437/1022574734690500608/unknown.png')
     await ctx.send(embed = embed)
 
+
 async def main():
     async with client:
         await client.add_cog(Customs(client))
