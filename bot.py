@@ -1,7 +1,6 @@
 import typing
 import random, sys
 import asyncio
-import interactions
 
 
 from distutils.command.check import check
@@ -10,6 +9,7 @@ import discord
 from discord import ActionRow, Button, ButtonStyle
 from discord.ext import commands
 from Music import Music
+from Customs import Customs
 
 
 
@@ -81,6 +81,7 @@ async def NSFW(ctx):
 async def test(ctx):
     await ctx.send("TEST")
 
+
 @client.command()
 async def customs(ctx):
     """Generiert Teams für Customsgames """
@@ -117,6 +118,7 @@ async def help(ctx):
 async def main():
     async with client:
         await client.add_cog(Music(client))
+        await client.add_cog(Customs(client))
         await client.start(TOKEN)
 
 
