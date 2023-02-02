@@ -3,6 +3,7 @@ import typing
 import random, sys
 import asyncio
 
+
 from distutils.command.check import check
 
 import discord
