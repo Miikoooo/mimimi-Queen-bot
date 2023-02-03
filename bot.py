@@ -74,7 +74,7 @@ async def join(ctx):
 #Robins Command
 @client.command()
 async def NSFW(ctx):
-    """" Shows NSFW content """
+    """ Shows NSFW content """
     embed = discord.Embed(
             title = 'Biberkrieger',
             colour = discord.Colour.yellow()
