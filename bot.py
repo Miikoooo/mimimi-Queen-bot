@@ -11,7 +11,9 @@ from discord.ext import commands
 from discord.ui import Button, View
 
 from Music import Music
+from Button import Button
 from Customs import Customs
+
 
 
 
@@ -84,8 +86,10 @@ async def NSFW(ctx):
 async def main():
     async with client:
         await client.add_cog(Customs(client))
+        await client.add_cog(Button(client))
         await client.add_cog(Music(client))
         await client.start(TOKEN)
+        
 
 
 asyncio.run(main())

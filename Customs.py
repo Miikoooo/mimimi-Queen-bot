@@ -1,36 +1,26 @@
-import asyncio
 import discord
 from discord.ext import commands
 from discord.ui import View, Button
 
+import discord
+from discord.ext import commands
 
 class Customs(commands.Cog):
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, bot):
+        self.bot = bot
+    
+    @commands.command()
+    async def generate(self, ctx, *players: str):
+        '''Generates Teams e.g. /generate [Player1] [Player2] [Player3] ...'''
+        if len(players) % 2 == 1:
+            await ctx.send("An odd number of players cannot be divided equally into two teams")
+            return
         
-        @client.command()
-        async def custom(ctx):
-            '''Erstelle ein Custom'''
-            button1 = Button(style=discord.ButtonStyle.green, label="Start", emoji= '🎲')
-            button2 = Button(style=discord.ButtonStyle.red, label="Cancel", emoji= '☠️')
-            view = View()
-            view.add_item(button1)
-            view.add_item(button2)
-
-            async def button1_callback(interaction):
-                await interaction.response.send_message('Let the dice decide!')
-                await interaction.response.followup.send('Let the dice decide!')
-
-
-            button1.callback = button1_callback
-
-            async def button2_callback(interaction):
-                await interaction.response.edit_message(content='Schwach', view=None)
-
-            button2.callback = button2_callback
-                
+        first_team = players[:len(players)//2]
+        second_team = players[len(players)//2:]
+        
+        await ctx.send(f"Team 1: {', '.join(first_team)}\nTeam 2: {', '.join(second_team)}")
 
 
 
-
-            await ctx.send('Balacing approved vom Riot Balancing Team', view=view)    
+   
