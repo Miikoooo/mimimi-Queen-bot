@@ -18,7 +18,7 @@ from Customs import Customs
 
 
 
-TOKEN = 'MTAxNTI2ODM5NzgxMjA0MzgwNg.G1uupO.dZ6kETbAfxPAW2dHzJsLHClf7y-tvfiAWqd0x4'
+TOKEN = ''
 
 
 client = commands.Bot(command_prefix = ",", intents=discord.Intents.all())
