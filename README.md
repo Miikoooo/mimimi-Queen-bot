@@ -27,7 +27,7 @@ Command:
 
 ---
 
-### 🛠 Moderation
+### Moderation
 
 - `,ping`
 - `,purge <anzahl>`
