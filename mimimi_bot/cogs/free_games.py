@@ -110,6 +110,16 @@ class FreeGamesCog(commands.Cog):
     async def before_check(self):
         await self.bot.wait_until_ready()
 
+        now = datetime.now(BERLIN)
+
+        # nächste volle Stunde
+        next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+
+        # + 1 Minute Puffer
+        run_at = next_hour + timedelta(minutes=1)
+
+        await discord.utils.sleep_until(run_at)
+
     @commands.command(name="free")
     async def free(self, ctx: commands.Context):
         async with aiohttp.ClientSession(
