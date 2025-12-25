@@ -1,0 +1,241 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone, timedelta
+from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
+
+import aiohttp
+import discord
+from discord.ext import commands, tasks
+
+from mimimi_bot.config import load_config
+from mimimi_bot.services.epic import fetch_epic_free_games
+from mimimi_bot.services.steam_store import fetch_steam_store_free_specials
+from mimimi_bot.services.steamdb import fetch_steamdb_free_games
+from mimimi_bot.services.storage import load_state, save_state
+
+BERLIN = ZoneInfo("Europe/Berlin")
+REMINDER_HOURS_DEFAULT = 6
+CHECK_HOURS_DEFAULT = 1
+
+
+def now_de() -> str:
+    return datetime.now(BERLIN).strftime("%d.%m.%Y %H:%M")
+
+
+class FreeGamesCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.config = load_config()
+
+        self.state = load_state() or {}
+        self.state.setdefault("posted_ids", [])
+        self.state.setdefault("reminded_ids", [])
+
+        self.reminder_hours = REMINDER_HOURS_DEFAULT
+
+        self.check_free_games.change_interval(hours=CHECK_HOURS_DEFAULT)
+        self.check_free_games.start()
+
+    def cog_unload(self):
+        self.check_free_games.cancel()
+
+    @tasks.loop(hours=1)
+    async def check_free_games(self):
+        channel_id = self.config.free_games_channel_id
+        if not channel_id:
+            return
+
+        channel = self.bot.get_channel(channel_id)
+        if channel is None:
+            return
+
+        posted = set(self.state.get("posted_ids", []))
+        reminded = set(self.state.get("reminded_ids", []))
+
+        async with aiohttp.ClientSession(
+            headers={"User-Agent": "mimimi-Queen-bot/1.0"}
+        ) as session:
+            epic = await fetch_epic_free_games(session=session)
+
+            try:
+                steamdb = await fetch_steamdb_free_games(session=session)
+            except Exception:
+                steamdb = []
+
+            try:
+                steam_store = await fetch_steam_store_free_specials(
+                    session=session, limit=8
+                )
+            except Exception:
+                steam_store = []
+
+        all_items = epic + steamdb + steam_store
+
+        # neue
+        new_items = [x for x in all_items if x["id"] not in posted]
+        if new_items:
+            for source, items in _group_by_source(new_items).items():
+                await channel.send(embed=self._bundle(source, items, "Neue Free Games"))
+            for x in new_items:
+                posted.add(x["id"])
+
+        # reminder (nur wenn end parsebar)
+        now_utc = datetime.now(timezone.utc)
+        cutoff = now_utc + timedelta(hours=self.reminder_hours)
+
+        expiring: List[Dict[str, Any]] = []
+        for x in all_items:
+            if x["id"] in reminded:
+                continue
+            end_dt = _parse_end_utc(x.get("end"))
+            if end_dt and now_utc <= end_dt <= cutoff:
+                expiring.append(x)
+
+        if expiring:
+            for source, items in _group_by_source(expiring).items():
+                await channel.send(
+                    embed=self._bundle(
+                        source, items, f"Reminder (≤ {self.reminder_hours}h)"
+                    )
+                )
+            for x in expiring:
+                reminded.add(x["id"])
+
+        self.state["posted_ids"] = list(posted)
+        self.state["reminded_ids"] = list(reminded)
+        save_state(self.state)
+
+    @check_free_games.before_loop
+    async def before_check(self):
+        await self.bot.wait_until_ready()
+
+    @commands.command(name="free")
+    async def free(self, ctx: commands.Context):
+        async with aiohttp.ClientSession(
+            headers={"User-Agent": "mimimi-Queen-bot/1.0"}
+        ) as session:
+            epic = await fetch_epic_free_games(session=session)
+
+            try:
+                steamdb = await fetch_steamdb_free_games(session=session)
+            except Exception:
+                steamdb = []
+
+            try:
+                steam_store = await fetch_steam_store_free_specials(
+                    session=session, limit=8
+                )
+            except Exception:
+                steam_store = []
+
+        if epic:
+            await ctx.send(embed=self._bundle("epic", epic, "Aktuell kostenlos"))
+
+        if steamdb:
+            await ctx.send(embed=self._bundle("steamdb", steamdb, "Aktuell kostenlos"))
+        else:
+            status = discord.Embed(
+                title="Steam Status",
+                description=f"Zuletzt aktualisiert: {now_de()} (DE)",
+                color=discord.Color.orange(),
+            )
+            status.add_field(
+                name="SteamDB",
+                value="Aktuell keine **Free to Keep** Promotions.",
+                inline=False,
+            )
+
+            if steam_store:
+                status.add_field(
+                    name="Steam Store (Fallback)",
+                    value=f"{len(steam_store)} Treffer (0€ Specials) – siehe nächstes Embed.",
+                    inline=False,
+                )
+            else:
+                status.add_field(
+                    name="Steam Store",
+                    value="Aktuell keine **0€ Specials** gefunden.",
+                    inline=False,
+                )
+
+            await ctx.send(embed=status)
+
+            if steam_store:
+                await ctx.send(
+                    embed=self._bundle(
+                        "steam", steam_store, "Steam Fallback (0€ Specials)"
+                    )
+                )
+
+        if not epic and not steamdb and not steam_store:
+            await ctx.send("Gerade nichts gefunden.")
+
+    def _bundle(
+        self, source: str, items: List[Dict[str, Any]], title_prefix: str
+    ) -> discord.Embed:
+        if source == "epic":
+            src = "Epic Games"
+        elif source == "steamdb":
+            src = "Steam (SteamDB)"
+        elif source == "steam":
+            src = "Steam Store"
+        else:
+            src = source
+
+        e = discord.Embed(
+            title=f"{title_prefix}: {src}",
+            description=self._format(items),
+            color=discord.Color.green(),
+        )
+        e.set_footer(text=f"Zuletzt aktualisiert: {now_de()} (DE)")
+        return e
+
+    def _format(self, items: List[Dict[str, Any]]) -> str:
+        lines: List[str] = []
+        for x in items[:10]:
+            end_dt = _parse_end_utc(x.get("end"))
+            if end_dt:
+                end_de = end_dt.astimezone(BERLIN).strftime("%d.%m.%Y %H:%M")
+                lines.append(f"- [{x['title']}]({x['url']}) — endet: {end_de} (DE)")
+            else:
+                lines.append(f"- [{x['title']}]({x['url']})")
+        if len(items) > 10:
+            lines.append(f"... und {len(items) - 10} weitere")
+        return "\n".join(lines)
+
+
+def _group_by_source(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for x in items:
+        out.setdefault(x.get("source", "unknown"), []).append(x)
+    return out
+
+
+def _parse_end_utc(end: Optional[str]) -> Optional[datetime]:
+    if not end:
+        return None
+
+    s = end.strip()
+
+    # Epic ISO Z
+    if "T" in s and (s.endswith("Z") or s.endswith("z")):
+        try:
+            s2 = s.replace("z", "Z")
+            if "." in s2:
+                s2 = s2.split(".")[0] + "Z"
+            dt = datetime.strptime(s2, "%Y-%m-%dT%H:%M:%SZ")
+            return dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+
+    # SteamDB: "YYYY-MM-DD HH:MM UTC"
+    s_no_utc = s.replace("UTC", "").strip()
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            dt = datetime.strptime(s_no_utc, fmt)
+            return dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+
+    return None
