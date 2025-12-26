@@ -102,8 +102,13 @@ class FreeGamesCog(commands.Cog):
             for x in expiring:
                 reminded.add(x["id"])
 
+        print("[STATE] posted_ids:", self.state.get("posted_ids"))
+        print("[STATE] reminded_ids:", self.state.get("reminded_ids"))
         self.state["posted_ids"] = list(posted)
         self.state["reminded_ids"] = list(reminded)
+        print("[STATE] posted_ids:", self.state.get("posted_ids"))
+        print("[STATE] reminded_ids:", self.state.get("reminded_ids"))
+
         save_state(self.state)
 
     @check_free_games.before_loop
