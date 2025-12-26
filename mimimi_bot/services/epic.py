@@ -74,16 +74,16 @@ async def fetch_epic_free_games(
             end = offer.get("endDate")  # ISO UTC
 
             promo_key = start or "no-start"
+            item_id = f"epic:{game_id}:{promo_key}"
 
             results.append(
                 {
-                    "id": f"epic:{game_id}:{promo_key}",
+                    "id": item_id,
                     "source": "epic",
                     "title": title,
                     "url": url,
                     "start": start,
                     "end": end,
-                    "type": "Free to Keep",
                 }
             )
 

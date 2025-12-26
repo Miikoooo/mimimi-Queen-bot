@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -16,7 +16,6 @@ from mimimi_bot.services.storage import load_state, save_state
 
 BERLIN = ZoneInfo("Europe/Berlin")
 REMINDER_HOURS_DEFAULT = 6
-CHECK_HOURS_DEFAULT = 1
 
 
 def now_de() -> str:
@@ -34,19 +33,46 @@ class FreeGamesCog(commands.Cog):
 
         self.reminder_hours = REMINDER_HOURS_DEFAULT
 
-        self.check_free_games.change_interval(hours=CHECK_HOURS_DEFAULT)
-        self.check_free_games.start()
+        self.daily_epic_check.start()
+        self.reminder_check.start()
 
     def cog_unload(self):
-        self.check_free_games.cancel()
+        self.daily_epic_check.cancel()
+        self.reminder_check.cancel()
 
-    @tasks.loop(hours=1)
-    async def check_free_games(self):
-        channel_id = self.config.free_games_channel_id
-        if not channel_id:
+    # EXAKT 17:01 DE jeden Tag
+    @tasks.loop(time=time(hour=17, minute=1, tzinfo=BERLIN))
+    async def daily_epic_check(self):
+        channel = self._get_target_channel()
+        if channel is None:
             return
 
-        channel = self.bot.get_channel(channel_id)
+        posted = set(self.state.get("posted_ids", []))
+
+        async with aiohttp.ClientSession(
+            headers={"User-Agent": "mimimi-Queen-bot/1.0"}
+        ) as session:
+            epic = await fetch_epic_free_games(session=session)
+
+        new_epic = [x for x in epic if x["id"] not in posted]
+        if new_epic:
+            await channel.send(
+                embed=self._bundle("epic", new_epic, "Neues Epic Free Game")
+            )
+            for x in new_epic:
+                posted.add(x["id"])
+
+            self.state["posted_ids"] = list(posted)
+            save_state(self.state)
+
+    @daily_epic_check.before_loop
+    async def before_daily(self):
+        await self.bot.wait_until_ready()
+
+    # Reminder + optional Steam checks (stündlich reicht)
+    @tasks.loop(hours=1)
+    async def reminder_check(self):
+        channel = self._get_target_channel()
         if channel is None:
             return
 
@@ -72,15 +98,17 @@ class FreeGamesCog(commands.Cog):
 
         all_items = epic + steamdb + steam_store
 
-        # neue
-        new_items = [x for x in all_items if x["id"] not in posted]
-        if new_items:
-            for source, items in _group_by_source(new_items).items():
+        # Optional: neue Steam-Deals posten (Epic machen wir ja täglich fix)
+        new_non_epic = [
+            x for x in all_items if x["source"] != "epic" and x["id"] not in posted
+        ]
+        if new_non_epic:
+            for source, items in _group_by_source(new_non_epic).items():
                 await channel.send(embed=self._bundle(source, items, "Neue Free Games"))
-            for x in new_items:
+            for x in new_non_epic:
                 posted.add(x["id"])
 
-        # reminder (nur wenn end parsebar)
+        # Reminder
         now_utc = datetime.now(timezone.utc)
         cutoff = now_utc + timedelta(hours=self.reminder_hours)
 
@@ -102,28 +130,13 @@ class FreeGamesCog(commands.Cog):
             for x in expiring:
                 reminded.add(x["id"])
 
-        print("[STATE] posted_ids:", self.state.get("posted_ids"))
-        print("[STATE] reminded_ids:", self.state.get("reminded_ids"))
         self.state["posted_ids"] = list(posted)
         self.state["reminded_ids"] = list(reminded)
-        print("[STATE] posted_ids:", self.state.get("posted_ids"))
-        print("[STATE] reminded_ids:", self.state.get("reminded_ids"))
-
         save_state(self.state)
 
-    @check_free_games.before_loop
-    async def before_check(self):
+    @reminder_check.before_loop
+    async def before_reminder(self):
         await self.bot.wait_until_ready()
-
-        now = datetime.now(BERLIN)
-
-        # nächste volle Stunde
-        next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-
-        # + 1 Minute Puffer
-        run_at = next_hour + timedelta(minutes=1)
-
-        await discord.utils.sleep_until(run_at)
 
     @commands.command(name="free")
     async def free(self, ctx: commands.Context):
@@ -186,6 +199,13 @@ class FreeGamesCog(commands.Cog):
         if not epic and not steamdb and not steam_store:
             await ctx.send("Gerade nichts gefunden.")
 
+    def _get_target_channel(self) -> Optional[discord.abc.Messageable]:
+        channel_id = self.config.free_games_channel_id
+        if not channel_id:
+            return None
+        ch = self.bot.get_channel(channel_id)
+        return ch
+
     def _bundle(
         self, source: str, items: List[Dict[str, Any]], title_prefix: str
     ) -> discord.Embed:
@@ -233,7 +253,6 @@ def _parse_end_utc(end: Optional[str]) -> Optional[datetime]:
 
     s = end.strip()
 
-    # Epic ISO Z
     if "T" in s and (s.endswith("Z") or s.endswith("z")):
         try:
             s2 = s.replace("z", "Z")
@@ -244,7 +263,6 @@ def _parse_end_utc(end: Optional[str]) -> Optional[datetime]:
         except Exception:
             return None
 
-    # SteamDB: "YYYY-MM-DD HH:MM UTC"
     s_no_utc = s.replace("UTC", "").strip()
     for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
         try:
