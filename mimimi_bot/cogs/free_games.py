@@ -33,19 +33,22 @@ class FreeGamesCog(commands.Cog):
 
         self.reminder_hours = REMINDER_HOURS_DEFAULT
 
-        self.daily_epic_check.start()
+        self.daily_epic_post.start()
         self.reminder_check.start()
 
     def cog_unload(self):
-        self.daily_epic_check.cancel()
+        self.daily_epic_post.cancel()
         self.reminder_check.cancel()
 
-    # EXAKT 17:01 DE jeden Tag
+    # ✅ EXAKT 17:01 DE jeden Tag: Epic check + posten wenn neu
     @tasks.loop(time=time(hour=17, minute=1, tzinfo=BERLIN))
-    async def daily_epic_check(self):
+    async def daily_epic_post(self):
         channel = self._get_target_channel()
         if channel is None:
             return
+
+        # Debug: Damit du in Railway siehst, dass 17:01 wirklich getriggert hat
+        print(f"[FreeGames] daily_epic_post tick {now_de()} (DE)", flush=True)
 
         posted = set(self.state.get("posted_ids", []))
 
@@ -55,21 +58,22 @@ class FreeGamesCog(commands.Cog):
             epic = await fetch_epic_free_games(session=session)
 
         new_epic = [x for x in epic if x["id"] not in posted]
-        if new_epic:
-            await channel.send(
-                embed=self._bundle("epic", new_epic, "Neues Epic Free Game")
-            )
-            for x in new_epic:
-                posted.add(x["id"])
+        if not new_epic:
+            return
 
-            self.state["posted_ids"] = list(posted)
-            save_state(self.state)
+        await channel.send(embed=self._bundle("epic", new_epic, "Neues Epic Free Game"))
 
-    @daily_epic_check.before_loop
-    async def before_daily(self):
+        for x in new_epic:
+            posted.add(x["id"])
+
+        self.state["posted_ids"] = list(posted)
+        save_state(self.state)
+
+    @daily_epic_post.before_loop
+    async def before_daily_epic_post(self):
         await self.bot.wait_until_ready()
 
-    # Reminder + optional Steam checks (stündlich reicht)
+    # Reminder + Steam (stündlich)
     @tasks.loop(hours=1)
     async def reminder_check(self):
         channel = self._get_target_channel()
@@ -98,7 +102,7 @@ class FreeGamesCog(commands.Cog):
 
         all_items = epic + steamdb + steam_store
 
-        # Optional: neue Steam-Deals posten (Epic machen wir ja täglich fix)
+        # Optional: neue Nicht-Epic Deals posten (Epic kommt fix um 17:01)
         new_non_epic = [
             x for x in all_items if x["source"] != "epic" and x["id"] not in posted
         ]
@@ -108,7 +112,7 @@ class FreeGamesCog(commands.Cog):
             for x in new_non_epic:
                 posted.add(x["id"])
 
-        # Reminder
+        # Reminder (≤ reminder_hours vor Ablauf, einmalig)
         now_utc = datetime.now(timezone.utc)
         cutoff = now_utc + timedelta(hours=self.reminder_hours)
 
@@ -203,8 +207,7 @@ class FreeGamesCog(commands.Cog):
         channel_id = self.config.free_games_channel_id
         if not channel_id:
             return None
-        ch = self.bot.get_channel(channel_id)
-        return ch
+        return self.bot.get_channel(channel_id)
 
     def _bundle(
         self, source: str, items: List[Dict[str, Any]], title_prefix: str
@@ -253,6 +256,7 @@ def _parse_end_utc(end: Optional[str]) -> Optional[datetime]:
 
     s = end.strip()
 
+    # Epic ISO Z
     if "T" in s and (s.endswith("Z") or s.endswith("z")):
         try:
             s2 = s.replace("z", "Z")
@@ -263,6 +267,7 @@ def _parse_end_utc(end: Optional[str]) -> Optional[datetime]:
         except Exception:
             return None
 
+    # SteamDB: "YYYY-MM-DD HH:MM UTC"
     s_no_utc = s.replace("UTC", "").strip()
     for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
         try:
