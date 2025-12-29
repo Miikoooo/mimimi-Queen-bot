@@ -64,22 +64,11 @@ class FreeGamesCog(commands.Cog):
         active_fresh: List[Dict[str, Any]] = []
 
         for x in epic:
-            start_dt = _parse_end_utc(x.get("start"))  # ja, die Funktion kann ISO Z
-            end_dt = _parse_end_utc(x.get("end"))
-
-            # Wenn keine Zeiten da sind: ignorieren (sonst postet er random Zeug)
-            if not start_dt:
-                continue
-
-            # muss gestartet sein
-            if start_dt > now_utc:
-                continue
-
-            # wenn end vorhanden: muss noch laufen
-            if end_dt and now_utc > end_dt:
+            if not _is_active_promo(x, now_utc):
                 continue
 
             # muss "frisch" sein
+            start_dt = _parse_end_utc(x.get("start"))
             if now_utc - start_dt > fresh_window:
                 continue
 
@@ -140,8 +129,20 @@ class FreeGamesCog(commands.Cog):
             for x in new_non_epic:
                 posted.add(x["id"])
 
-        # Reminder (≤ reminder_hours vor Ablauf, einmalig)
         now_utc = datetime.now(timezone.utc)
+
+        # Epic Fallback: stündlich prüfen, falls 17:01 zu früh war
+        active_epic = [
+            x for x in epic if _is_active_promo(x, now_utc) and x["id"] not in posted
+        ]
+        if active_epic:
+            await channel.send(
+                embed=self._bundle("epic", active_epic, "Neues Epic Free Game")
+            )
+            for x in active_epic:
+                posted.add(x["id"])
+
+        # Reminder (≤ reminder_hours vor Ablauf, einmalig)
         cutoff = now_utc + timedelta(hours=self.reminder_hours)
 
         expiring: List[Dict[str, Any]] = []
@@ -276,6 +277,25 @@ def _group_by_source(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, An
     for x in items:
         out.setdefault(x.get("source", "unknown"), []).append(x)
     return out
+
+
+def _is_active_promo(item: Dict[str, Any], now_utc: datetime) -> bool:
+    start_dt = _parse_end_utc(item.get("start"))  # ja, die Funktion kann ISO Z
+    end_dt = _parse_end_utc(item.get("end"))
+
+    # Wenn keine Zeiten da sind: ignorieren (sonst postet er random Zeug)
+    if not start_dt:
+        return False
+
+    # muss gestartet sein
+    if start_dt > now_utc:
+        return False
+
+    # wenn end vorhanden: muss noch laufen
+    if end_dt and now_utc > end_dt:
+        return False
+
+    return True
 
 
 def _parse_end_utc(end: Optional[str]) -> Optional[datetime]:
