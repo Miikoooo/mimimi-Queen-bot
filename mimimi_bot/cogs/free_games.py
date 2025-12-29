@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta, time
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -40,14 +40,13 @@ class FreeGamesCog(commands.Cog):
         self.daily_epic_post.cancel()
         self.reminder_check.cancel()
 
-    # EXAKT 17:01 DE jeden Tag: Epic check + posten wenn neu
+    # EXAKT 17:01 DE: poste nur das "frisch gestartete" Epic-Angebot
     @tasks.loop(time=time(hour=17, minute=1, tzinfo=BERLIN))
     async def daily_epic_post(self):
         channel = self._get_target_channel()
         if channel is None:
             return
 
-        # Debug: Damit du in Railway siehst, dass 17:01 wirklich getriggert hat
         print(f"[FreeGames] daily_epic_post tick {now_de()} (DE)", flush=True)
 
         posted = set(self.state.get("posted_ids", []))
@@ -59,20 +58,35 @@ class FreeGamesCog(commands.Cog):
 
         now_utc = datetime.now(timezone.utc)
 
-        # nur Promos, die "jetzt aktiv" sind und frisch gestartet sind
-        fresh_window = timedelta(hours=3)
-        active_fresh: List[Dict[str, Any]] = []
+        # Robust: falls Epic minimal verzögert oder Restart/Deploy, lassen wir Fenster etwas größer
+        fresh_window = timedelta(hours=2)
 
+        active_fresh: List[Dict[str, Any]] = []
         for x in epic:
-            if not _is_active_promo(x, now_utc):
+            start_dt = _parse_dt_utc(x.get("start"))
+            end_dt = _parse_dt_utc(x.get("end"))
+
+            if not start_dt:
                 continue
 
-            # muss "frisch" sein
-            start_dt = _parse_end_utc(x.get("start"))
+            # aktiv?
+            if start_dt > now_utc:
+                continue
+            if end_dt and now_utc > end_dt:
+                continue
+
+            # frisch?
             if now_utc - start_dt > fresh_window:
                 continue
 
             active_fresh.append(x)
+
+        # newest first
+        active_fresh.sort(
+            key=lambda it: _parse_dt_utc(it.get("start"))
+            or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
 
         new_epic = [x for x in active_fresh if x["id"] not in posted]
         if not new_epic:
@@ -119,9 +133,9 @@ class FreeGamesCog(commands.Cog):
 
         all_items = epic + steamdb + steam_store
 
-        # Optional: neue Nicht-Epic Deals posten (Epic kommt fix um 17:01)
+        # neue Nicht-Epic Deals posten (Epic kommt fix um 17:01)
         new_non_epic = [
-            x for x in all_items if x["source"] != "epic" and x["id"] not in posted
+            x for x in all_items if x.get("source") != "epic" and x["id"] not in posted
         ]
         if new_non_epic:
             for source, items in _group_by_source(new_non_epic).items():
@@ -129,39 +143,15 @@ class FreeGamesCog(commands.Cog):
             for x in new_non_epic:
                 posted.add(x["id"])
 
-        # Epic Fallback: stündlich prüfen, falls 17:01 zu früh war
-        active_epic = [
-            x for x in epic if _is_active_promo(x, now_utc) and x["id"] not in posted
-        ]
-        if active_epic:
-            await channel.send(
-                embed=self._bundle("epic", active_epic, "Neues Epic Free Game")
-            )
-            for x in active_epic:
-                posted.add(x["id"])
-
         # Reminder (≤ reminder_hours vor Ablauf, einmalig)
         now_utc = datetime.now(timezone.utc)
-
-        # Epic Fallback: stündlich prüfen, falls 17:01 zu früh war
-        active_epic = [
-            x for x in epic if _is_active_promo(x, now_utc) and x["id"] not in posted
-        ]
-        if active_epic:
-            await channel.send(
-                embed=self._bundle("epic", active_epic, "Neues Epic Free Game")
-            )
-            for x in active_epic:
-                posted.add(x["id"])
-
-        # Reminder (≤ reminder_hours vor Ablauf, einmalig)
         cutoff = now_utc + timedelta(hours=self.reminder_hours)
 
         expiring: List[Dict[str, Any]] = []
         for x in all_items:
             if x["id"] in reminded:
                 continue
-            end_dt = _parse_end_utc(x.get("end"))
+            end_dt = _parse_dt_utc(x.get("end"))
             if end_dt and now_utc <= end_dt <= cutoff:
                 expiring.append(x)
 
@@ -273,7 +263,7 @@ class FreeGamesCog(commands.Cog):
     def _format(self, items: List[Dict[str, Any]]) -> str:
         lines: List[str] = []
         for x in items[:10]:
-            end_dt = _parse_end_utc(x.get("end"))
+            end_dt = _parse_dt_utc(x.get("end"))
             if end_dt:
                 end_de = end_dt.astimezone(BERLIN).strftime("%d.%m.%Y %H:%M")
                 lines.append(f"- [{x['title']}]({x['url']}) — endet: {end_de} (DE)")
@@ -291,30 +281,11 @@ def _group_by_source(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, An
     return out
 
 
-def _is_active_promo(item: Dict[str, Any], now_utc: datetime) -> bool:
-    start_dt = _parse_end_utc(item.get("start"))  # ja, die Funktion kann ISO Z
-    end_dt = _parse_end_utc(item.get("end"))
-
-    # Wenn keine Zeiten da sind: ignorieren (sonst postet er random Zeug)
-    if not start_dt:
-        return False
-
-    # muss gestartet sein
-    if start_dt > now_utc:
-        return False
-
-    # wenn end vorhanden: muss noch laufen
-    if end_dt and now_utc > end_dt:
-        return False
-
-    return True
-
-
-def _parse_end_utc(end: Optional[str]) -> Optional[datetime]:
-    if not end:
+def _parse_dt_utc(value: Optional[str]) -> Optional[datetime]:
+    if not value:
         return None
 
-    s = end.strip()
+    s = value.strip()
 
     # Epic ISO Z
     if "T" in s and (s.endswith("Z") or s.endswith("z")):
