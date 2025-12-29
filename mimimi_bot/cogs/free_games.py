@@ -142,6 +142,19 @@ class FreeGamesCog(commands.Cog):
 
         # Reminder (≤ reminder_hours vor Ablauf, einmalig)
         now_utc = datetime.now(timezone.utc)
+
+        # Epic Fallback: stündlich prüfen, falls 17:01 zu früh war
+        active_epic = [
+            x for x in epic if _is_active_promo(x, now_utc) and x["id"] not in posted
+        ]
+        if active_epic:
+            await channel.send(
+                embed=self._bundle("epic", active_epic, "Neues Epic Free Game")
+            )
+            for x in active_epic:
+                posted.add(x["id"])
+
+        # Reminder (≤ reminder_hours vor Ablauf, einmalig)
         cutoff = now_utc + timedelta(hours=self.reminder_hours)
 
         expiring: List[Dict[str, Any]] = []
