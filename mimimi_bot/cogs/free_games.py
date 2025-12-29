@@ -40,7 +40,7 @@ class FreeGamesCog(commands.Cog):
         self.daily_epic_post.cancel()
         self.reminder_check.cancel()
 
-    # ✅ EXAKT 17:01 DE jeden Tag: Epic check + posten wenn neu
+    # EXAKT 17:01 DE jeden Tag: Epic check + posten wenn neu
     @tasks.loop(time=time(hour=17, minute=1, tzinfo=BERLIN))
     async def daily_epic_post(self):
         channel = self._get_target_channel()
@@ -57,7 +57,35 @@ class FreeGamesCog(commands.Cog):
         ) as session:
             epic = await fetch_epic_free_games(session=session)
 
-        new_epic = [x for x in epic if x["id"] not in posted]
+        now_utc = datetime.now(timezone.utc)
+
+        # nur Promos, die "jetzt aktiv" sind und frisch gestartet sind
+        fresh_window = timedelta(hours=3)
+        active_fresh: List[Dict[str, Any]] = []
+
+        for x in epic:
+            start_dt = _parse_end_utc(x.get("start"))  # ja, die Funktion kann ISO Z
+            end_dt = _parse_end_utc(x.get("end"))
+
+            # Wenn keine Zeiten da sind: ignorieren (sonst postet er random Zeug)
+            if not start_dt:
+                continue
+
+            # muss gestartet sein
+            if start_dt > now_utc:
+                continue
+
+            # wenn end vorhanden: muss noch laufen
+            if end_dt and now_utc > end_dt:
+                continue
+
+            # muss "frisch" sein
+            if now_utc - start_dt > fresh_window:
+                continue
+
+            active_fresh.append(x)
+
+        new_epic = [x for x in active_fresh if x["id"] not in posted]
         if not new_epic:
             return
 
