@@ -2,10 +2,7 @@
 
 Ein privater Discord-Bot in Python mit Fokus auf:
 
-- Free Games (Epic Games, SteamDB, Steam Store Fallback)
-- einfache Moderation
-- UI-Buttons
-- saubere, modulare Struktur (Cogs + Services)
+- Free Games (Epic Games, Steam)
 
 Der Bot checkt automatisch nach neuen Free Games und postet sie in einen definierten Channel.
 
@@ -35,11 +32,6 @@ Command:
 
 ---
 
-### UI
-
-- Test-Button mit Discord `View` / `Button`
-
----
 
 ## Voraussetzungen
 
